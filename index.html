@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Персонажи</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: var(--tg-theme-text-color);
+            font-size: 28px;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .card {
+            background-color: var(--tg-theme-secondary-bg-color);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+        }
+        
+        .card-image {
+            width: 100%;
+            height: 200px;
+            background-color: var(--tg-theme-secondary-bg-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            color: var(--tg-theme-text-color);
+        }
+        
+        .card-content {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+        }
+        
+        .card-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--tg-theme-text-color);
+            margin-bottom: 8px;
+        }
+        
+        .card-description {
+            font-size: 14px;
+            color: var(--tg-theme-hint-color);
+            line-height: 1.5;
+            margin-bottom: 12px;
+            flex-grow: 1;
+        }
+
+        .card-button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            margin-top: auto;
+        }
+
+        .card-button:hover {
+            opacity: 0.9;
+        }
+
+        .card-button:active {
+            opacity: 0.7;
+        }
+
+        /* Адаптивность */
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            body {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Персонажи</h1>
+        
+        <div class="grid" id="charactersGrid">
+            <!-- Карточки будут добавлены через JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        // Инициализация Telegram Web App
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+
+        // Инициализация Supabase клиента из конфигурации
+        const supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+
+        let characters = [];
+
+        // Функция для создания карточки
+        function createCard(character) {
+            // Если есть avatar_url, используем его, иначе показываем первую букву имени
+            const imageContent = character.avatar_url
+                ? `<img src="${character.avatar_url}" alt="${character.name}" style="width: 100%; height: 100%; object-fit: cover;">`
+                : `<div style="font-size: 60px; color: var(--tg-theme-hint-color, #666);">${character.name.charAt(0)}</div>`;
+
+            // Ограничиваем описание до 100 символов
+            const shortDescription = character.description.length > 100
+                ? character.description.substring(0, 100) + '...'
+                : character.description;
+
+            return `
+                <div class="card">
+                    <div class="card-image">${imageContent}</div>
+                    <div class="card-content">
+                        <div class="card-title">${character.name}</div>
+                        <div class="card-description">${shortDescription}</div>
+                        <button class="card-button" onclick="selectCharacter(${character.id}); event.stopPropagation();">Выбрать</button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Загрузка персонажей из Supabase
+        async function loadCharacters() {
+            console.log('🔄 Начинаю загрузку персонажей из Supabase...');
+            console.log('📡 Supabase URL:', CONFIG.SUPABASE_URL);
+
+            try {
+                console.log('📤 Отправляю запрос к таблице characters...');
+                console.log('🔍 Фильтры: is_active = true');
+
+                const { data, error } = await supabase
+                    .from('characters')
+                    .select('*')
+                    .eq('is_active', true)
+                    .order('created_at', { ascending: false });
+
+                console.log('📥 Получен ответ от Supabase');
+
+                if (error) {
+                    console.error('❌ Supabase вернул ошибку:', error);
+                    throw error;
+                }
+
+                console.log('✅ Данные успешно получены');
+                console.log('📊 Количество персонажей:', data ? data.length : 0);
+                console.log('📋 Данные персонажей:', data);
+
+                characters = data || [];
+
+                if (characters.length > 0) {
+                    console.log('👥 Список персонажей:');
+                    characters.forEach((char, index) => {
+                        console.log(`  ${index + 1}. ${char.name} (ID: ${char.id})`);
+                    });
+                } else {
+                    console.warn('⚠️ Персонажи не найдены в базе данных');
+                }
+
+                console.log('🎨 Начинаю отрисовку персонажей...');
+                renderCharacters();
+                console.log('✅ Персонажи успешно отрисованы');
+
+            } catch (error) {
+                console.error('❌ Критическая ошибка при загрузке персонажей:');
+                console.error('📛 Тип ошибки:', error.name);
+                console.error('💬 Сообщение:', error.message);
+                console.error('📜 Полная ошибка:', error);
+
+                const grid = document.getElementById('charactersGrid');
+                grid.innerHTML = `
+                    <p style="text-align: center; color: #999; grid-column: 1/-1;">
+                        Ошибка загрузки персонажей.<br>
+                        <small>${error.message}</small><br>
+                        <small>Проверьте настройки Supabase</small>
+                    </p>
+                `;
+            }
+        }
+        
+        // Отрисовка всех карточек
+        function renderCharacters() {
+            const grid = document.getElementById('charactersGrid');
+            if (characters.length === 0) {
+                grid.innerHTML = '<p style="text-align: center; color: #999; grid-column: 1/-1;">Персонажи не найдены</p>';
+                return;
+            }
+            grid.innerHTML = characters.map(char => createCard(char)).join('');
+        }
+        
+        // Обработка выбора персонажа
+        function selectCharacter(id) {
+            const character = characters.find(c => c.id === id);
+            if (!character) return;
+
+            console.log('✅ Персонаж выбран:', character.name);
+            console.log('📤 Отправка данных в бот...');
+
+            const data = {
+                action: 'select_character',
+                character_id: character.id,
+                character_name: character.name,
+                character_description: character.description,
+                character_avatar: character.avatar_url
+            };
+
+            // Отправляем данные в бота
+            tg.sendData(JSON.stringify(data));
+
+            console.log('✅ Данные отправлены');
+        }
+        
+        // Подписка на изменения в реальном времени
+        function subscribeToChanges() {
+            supabase
+                .channel('characters_changes')
+                .on(
+                    'postgres_changes',
+                    { 
+                        event: '*',  // INSERT, UPDATE, DELETE
+                        schema: 'public', 
+                        table: 'characters' 
+                    },
+                    (payload) => {
+                        console.log('🔔 Изменение в БД:', payload);
+                        // Перезагружаем персонажей при любом изменении
+                        loadCharacters();
+                    }
+                )
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('✅ Подписка на реал-тайм обновления активна');
+                    }
+                });
+        }
+        
+        // Инициализация
+        async function init() {
+            console.log('🚀 Инициализация приложения...');
+            console.log('👤 Telegram User:', tg.initDataUnsafe?.user);
+            console.log('📱 Версия Web App:', tg.version);
+            console.log('🎨 Тема:', tg.colorScheme);
+
+            // Загружаем персонажей
+            await loadCharacters();
+
+            // Подключаем реал-тайм обновления
+            console.log('🔔 Подключаю реал-тайм обновления...');
+            subscribeToChanges();
+
+            // Сигнализируем Telegram, что приложение готово
+            tg.ready();
+            console.log('✅ Приложение готово (ready() вызван)');
+        }
+
+        console.log('▶️ Запуск приложения...');
+        init();
+    </script>
+</body>
+</html>
