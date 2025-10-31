@@ -459,18 +459,27 @@
             console.log('✅ Персонаж выбран:', character.name);
             console.log('📤 Отправка данных в бот...');
 
+            // Получаем telegram_id пользователя
+            const telegramUser = tg.initDataUnsafe?.user;
+            const telegramId = telegramUser?.id || null;
+
+            console.log('👤 Telegram User ID:', telegramId);
+
             const data = {
                 action: 'select_character',
                 character_id: character.id,
                 character_name: character.name,
                 character_description: character.description,
-                character_avatar: character.avatar_url
+                character_avatar: character.avatar_url,
+                telegram_id: telegramId,
+                username: telegramUser?.username || null,
+                first_name: telegramUser?.first_name || null
             };
 
             // Отправляем данные в бота
             tg.sendData(JSON.stringify(data));
 
-            console.log('✅ Данные отправлены');
+            console.log('✅ Данные отправлены:', data);
         }
         
         // Подписка на изменения в реальном времени
